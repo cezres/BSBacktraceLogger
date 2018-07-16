@@ -72,6 +72,25 @@ typedef struct BSStackFrameEntry{
 
 static mach_port_t main_thread_id;
 
+
+#pragma mark - base image address
+
+intptr_t imageBaseAddressForImageName(const char *imageName) {
+    static NSDictionary *dict = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableDictionary *mutableDict = [NSMutableDictionary dictionary];
+        for (int i=0; i<_dyld_image_count(); i++) {
+            const char *name = _dyld_get_image_name(i);
+            intptr_t addr = _dyld_get_image_vmaddr_slide(i);
+            [mutableDict setObject:[NSNumber numberWithInteger:addr] forKey:[NSString stringWithUTF8String:name]];
+        }
+        dict = [mutableDict copy];
+    });
+    return [[dict objectForKey:[NSString stringWithUTF8String:imageName]] integerValue];
+}
+
+
 @implementation BSBacktraceLogger
 
 + (void)load {
@@ -215,7 +234,8 @@ NSString* bs_logBacktraceEntry(const int entryNum,
         sname = saddrBuff;
         offset = address - (uintptr_t)dlInfo->dli_fbase;
     }
-    return [NSString stringWithFormat:@"%-30s  0x%08" PRIxPTR " %s + %lu\n" ,fname, (uintptr_t)address, sname, offset];
+    intptr_t _address = address - imageBaseAddressForImageName(fname);
+    return [NSString stringWithFormat:@"%-30s  0x%08" PRIxPTR " %s + %lu\n" ,fname, (uintptr_t)_address, sname, offset];
 }
 
 const char* bs_lastPathEntry(const char* const path) {
